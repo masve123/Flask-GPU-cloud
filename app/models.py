@@ -12,7 +12,7 @@ from datetime import datetime
 from . import db
 
 class User(db.Model):
-    """User model."""
+    """Each user represents a user in the database"""
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
@@ -71,7 +71,15 @@ class GPU_instance(db.Model):
                 setattr(self, field, data[field])
 
 class GPU_booking(db.Model):
-    """To track the booking/reservation of GPU instances."""
+    """
+    To track the booking/reservation of GPU instances.
+
+    GPU_booking: This table should track the reservations or bookings 
+    of the GPU instances. When a user books a GPU instance, a record 
+    should be created in this table, linking the user to the specific 
+    GPU instance they have booked, along with the booking time frame 
+    (start_time and end_time)."""
+
     booking_id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     gpu_id = db.Column(db.Integer, db.ForeignKey('gpu_instance.id'), nullable=False)
@@ -100,10 +108,22 @@ class GPU_booking(db.Model):
 
 
 class GPU_usage(db.Model):
-    """To track usage statistics of GPU instances."""
+    """
+    To track usage statistics of GPU instances.
+    
+    This table could be used to track the actual usage of the GPU instances, 
+    such as how long they were used, by whom, and other usage statistics. 
+    This could be updated in real-time as the GPU is being used, or after 
+    the usage has completed, depending on your application's design."""
+
     usage_id = db.Column(db.Integer, primary_key=True)
     gpu_id = db.Column(db.Integer, db.ForeignKey('gpu_instance.id'), nullable=False)
+    booking_id = db.Column(db.Integer, db.ForeignKey('gpu_booking.booking_id'))
     usage_duration = db.Column(db.Integer, nullable=False)  # Example field
+
+    # Relationship with GPU_instance
+    gpu = db.relationship('GPU_instance', backref='usage', lazy=True)
+
 
     def __repr__(self):
         return '<GPU_usage %r>' % self.usage_id

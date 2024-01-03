@@ -43,6 +43,6 @@ flask db init
 flask db migrate -m "users table"
 flask db upgrade
 ```
-This formatting uses headers (`#` for main headers, `##` for sub-headers, etc.), bullet points, and code blocks to organize the content. The Markdown formatting will be rendered nicely on platforms like GitHub, making your `README.md` easy to read and navigate.
+
 
 

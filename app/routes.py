@@ -36,7 +36,7 @@ def register():
         return jsonify({'message': 'Registration failed.', 'error': str(e)}), 500
 
 
-####### Getter functions #######
+####### User endpoint functions #######
 
 @bp.route('/users/<int:user_id>', methods=['GET'])
 def get_user(user_id):
@@ -73,6 +73,7 @@ def delete_user(user_id):
     db.session.commit()
     return jsonify({'message': 'User deleted successfully!'}), 200
 
+####### GPU Instance endpoint functions #######
 
 # List Available GPU Instances: An endpoint to fetch available GPU instances.
 @bp.route('/gpu_instances', methods=['GET'])
