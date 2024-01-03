@@ -1,3 +1,7 @@
+"""
+This is where we set up our API endpoints
+"""
+
 from flask import request, jsonify
 from app.models import User, GPU_instance
 from flask import current_app as app

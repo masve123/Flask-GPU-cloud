@@ -1,4 +1,6 @@
-# This is where we will write our tests for our application
+"""
+This is where we will write our tests for our application
+"""
 
 import unittest
 from app import app, db
