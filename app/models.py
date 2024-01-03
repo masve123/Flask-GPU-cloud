@@ -3,7 +3,7 @@ ORM Concept: SQLAlchemy is an ORM library. ORM allows you to work with databases
 using high-level entities such as classes and objects rather than low-level database commands. 
 It maps (or connects) these classes to database tables.
 
-Class-to-Table Mapping: In SQLAlchemy, each class that inherits from db.Model is automatically 
+Class-to-Table Mapping: In SQLAlchemy, each class that inherits from ```db.Model``` is automatically 
 mapped to a table in the database. The class name typically corresponds to the table name (in a lowercase format), 
 and the class attributes correspond to the columns in the table.
 """
@@ -48,15 +48,25 @@ class GPU_instance(db.Model):
         return '<GPU_instance %r>' % self.name
     
     def to_dict(self):
+        """
+        Converts the GPU instance into a dictionary, typically for JSON serialization.
+        
+        Purpose: This is typically used when sending data from the server to the client.
+        """
         return {
             'id': self.id,
             'name': self.name,
             'gpu_type': self.gpu_type,
-            'gpu_memory': self.gpu_memory
+            'gpu_memory': self.gpu_memory,
+            'status': self.status
         }
     
     def from_dict(self, data):
-        for field in ['name', 'gpu_type', 'gpu_memory']:
+        """
+        Updates the GPU instance based on a dictionary of new data, 
+        typically coming from a JSON request.
+        """
+        for field in ['name', 'gpu_type', 'gpu_memory', 'status']:
             if field in data:
                 setattr(self, field, data[field])
 

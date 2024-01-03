@@ -17,10 +17,24 @@ bp = Blueprint('bp', __name__) # this is necessary to avoid circular imports
 def register():
     """Register a new user."""
     data = request.json
-    user = User(username=data['username'], email=data['email'])
-    db.session.add(user)
-    db.session.commit()
-    return jsonify({'message': 'User registered successfully!'}), 201
+
+    # Check if user already exists
+    existing_user = User.query.filter(
+        (User.username == data['username']) | 
+        (User.email == data['email'])
+    ).first()
+    if existing_user:
+        return jsonify({'message': 'User already exists.'}), 400
+
+    try:
+        user = User(username=data['username'], email=data['email'])
+        db.session.add(user)
+        db.session.commit()
+        return jsonify({'message': 'User registered successfully!'}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': 'Registration failed.', 'error': str(e)}), 500
+
 
 ####### Getter functions #######
 
@@ -94,3 +108,17 @@ def get_gpu_instance(gpu_instance_id):
     """Get a GPU instance by id."""
     gpu_instance = GPU_instance.query.get(gpu_instance_id)
     return jsonify(gpu_instance.to_dict()) if gpu_instance else ('', 404)
+
+# Update GPU Instance Details: An endpoint to update the details of a GPU instance.
+@bp.route('/gpu_instances/<int:gpu_instance_id>', methods=['PUT'])
+def update_gpu_instance(gpu_instance_id):
+    """Update a specific GPU instance."""
+    gpu_instance = GPU_instance.query.get(gpu_instance_id)
+    if not gpu_instance:
+        return jsonify({'message': 'GPU instance not found'}), 404
+
+    data = request.json
+    gpu_instance.from_dict(data)
+    db.session.commit()
+    return jsonify({'message': 'GPU instance updated successfully!'}), 200
+
