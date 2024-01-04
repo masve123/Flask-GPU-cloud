@@ -3,7 +3,7 @@ This is where we set up our API endpoints
 """
 
 from flask import request, jsonify
-from app.models import GPU_booking, GPU_usage, User, GPU_instance, GPU_status
+from app.models import GPU_booking, GPU_usage, User, GPU_instance, GPU_status, GPU_queue_entry, GPU_queue_status
 from flask import current_app as app
 from app import db
 
@@ -21,9 +21,29 @@ bp = Blueprint('bp', __name__) # this is necessary to avoid circular imports
 @bp.route('/register', methods=['POST'])
 def register():
     """
-    Register a new user.
-    
-
+    Register a new user
+    ---
+    tags:
+      - Users
+    description: Register a new user with a username and email.
+    parameters:
+      - name: username
+        in: formData
+        type: string
+        required: true
+        description: The user's username.
+      - name: email
+        in: formData
+        type: string
+        required: true
+        description: The user's email.
+    responses:
+      201:
+        description: User registered successfully.
+      400:
+        description: Bad request - user already exists.
+      500:
+        description: Error in registration process.
     """
     data = request.json
 
@@ -47,20 +67,77 @@ def register():
 
 @bp.route('/users/<int:user_id>', methods=['GET'])
 def get_user(user_id):
-    """Get a user by id."""
+    """
+    Get a user by id
+    ---
+    tags:
+      - Users
+    description: Retrieve details of a specific user by their user ID.
+    parameters:
+      - name: user_id
+        in: path
+        type: integer
+        required: true
+        description: Unique ID of the user.
+    responses:
+      200:
+        description: Details of the user.
+      404:
+        description: User not found.
+    """
     user = User.query.get(user_id)
     return jsonify(user.to_dict()) if user else ('', 404)
 
 @bp.route('/users', methods=['GET'])
 def get_all_users():
-    """Get all users."""
+    """
+    Get all users
+    ---
+    tags:
+      - Users
+    description: Retrieve details of all users.
+    responses:
+      200:
+        description: A list of users.
+    """
     users = User.query.all()
     return jsonify([user.to_dict() for user in users])
 
 
 @bp.route('/users/<int:user_id>', methods=['PUT'])
 def update_user(user_id):
-    """Update a user."""
+    """
+    Update a user
+    ---
+    tags:
+      - Users
+    description: Update details of a specific user.
+    parameters:
+      - name: user_id
+        in: path
+        type: integer
+        required: true
+        description: Unique ID of the user.
+      - in: body
+        name: body
+        schema:
+          id: UserUpdate
+          required:
+            - username
+            - email
+          properties:
+            username:
+              type: string
+              description: The user's new username.
+            email:
+              type: string
+              description: The user's new email.
+    responses:
+      200:
+        description: User updated successfully.
+      404:
+        description: User not found.
+    """
     user = User.query.get(user_id)
     if not user:
         return jsonify({'message': 'User not found'}), 404
@@ -72,7 +149,24 @@ def update_user(user_id):
 
 @bp.route('/users/<int:user_id>', methods=['DELETE'])
 def delete_user(user_id):
-    """Delete a user based on the user id."""
+    """
+    Delete a user
+    ---
+    tags:
+      - Users
+    description: Delete a specific user by their user ID.
+    parameters:
+      - name: user_id
+        in: path
+        type: integer
+        required: true
+        description: Unique ID of the user.
+    responses:
+      200:
+        description: User deleted successfully.
+      404:
+        description: User not found.
+    """
     user = User.query.get(user_id)
     if not user:
         return jsonify({'message': 'User not found'}), 404
@@ -352,7 +446,7 @@ def get_active_gpus():
 
 # An endpoint to generate a report for a specific GPU's usage over the past 24 hours.
 @bp.route('/gpu_usage/report/<int:gpu_id>', methods=['GET'])
-def gpu_usage_report(gpu_id):
+def gpu_usage_report(gpu_id): # look at GPUtils python package for further development
     """
     Generate a report for a specific GPU's usage over the past 24 hours.
     """
@@ -381,5 +475,95 @@ def gpu_usage_report(gpu_id):
 
 
 
-### QUEUEING SYSTEM ###
+############## QUEUEING SYSTEM ##############
+@bp.route('/gpu_queue/join', methods=['POST'])
+def join_gpu_queue():
+    user_id = request.json.get('user_id')
+    if not user_id:
+        return jsonify({'message': 'User ID is required'}), 400
+
+    queue_entry = GPU_queue_entry(user_id=user_id)
+    db.session.add(queue_entry)
+    db.session.commit()
+
+    return jsonify({'message': 'Added to GPU queue', 'queue_entry': queue_entry.to_dict()}), 201
+
+@bp.route('/gpu_queue/status', methods=['GET'])
+def check_queue_status():
+    user_id = request.args.get('user_id')
+    if not user_id:
+        return jsonify({'message': 'User ID is required'}), 400
+
+    queue_entries = GPU_queue_entry.query.filter_by(user_id=user_id).order_by(GPU_queue_entry.requested_at).all()
+    return jsonify([entry.to_dict() for entry in queue_entries])
+
+@bp.route('/gpu_queue/cancel/<int:queue_entry_id>', methods=['POST'])
+def cancel_queue_entry(queue_entry_id):
+    queue_entry = GPU_queue_entry.query.get(queue_entry_id)
+    if not queue_entry:
+        return jsonify({'message': 'Queue entry not found'}), 404
+
+    if queue_entry.status == GPU_queue_status.CANCELLED:
+        return jsonify({'message': 'Queue entry is already cancelled'}), 400
+    
+    if queue_entry.status == GPU_queue_status.ALLOCATED:
+        return jsonify({'message': 'Cannot cancel an allocated queue entry'}), 400
+
+    queue_entry.status = GPU_queue_status.CANCELLED
+    db.session.commit()
+
+    return jsonify({'message': 'Queue entry cancelled successfully'}), 200
+
+@bp.route('/gpu_queue', methods=['GET'])
+def get_gpu_queue():
+    """
+    Retrieve the entire GPU queue.
+    """
+    queue_entries = GPU_queue_entry.query.order_by(GPU_queue_entry.requested_at).all()
+    return jsonify([entry.to_dict() for entry in queue_entries])
+
+@bp.route('/gpu_queue/next', methods=['GET'])
+def get_next_in_queue():
+    """
+    Retrieve the next user in the GPU queue.
+    """
+    try:
+        queue_entry = GPU_queue_entry.query.filter_by(status=GPU_queue_status.PENDING).order_by(GPU_queue_entry.requested_at).first()
+        return jsonify(queue_entry.to_dict()) if queue_entry else ('', 404)
+    except Exception as e:
+        return jsonify({'message': 'Error retrieving the next queue entry', 'error': str(e)}), 500
+
+
+
+@bp.route('/gpu_queue/move/<int:queue_entry_id>/<string:position>', methods=['POST'])
+def move_queue_entry(queue_entry_id, position):
+    """
+    NOTE; this is an endpoint meant for admin users only.
+    Move a user in the queue to a specified position.
+
+    :param queue_entry_id: The ID of the queue entry to move.
+    :param position: The new position in the queue ('front' or 'back').
+    """
+    queue_entry = GPU_queue_entry.query.get(queue_entry_id)
+    if not queue_entry:
+        return jsonify({'message': 'Queue entry not found'}), 404
+
+    if position not in ['front', 'back']:
+        return jsonify({'message': 'Invalid position'}), 400
+    
+    try:
+        # Logic to update queue_order based on position
+        if position == 'front':
+            # Set to a value lower than the current minimum
+            min_order = db.session.query(func.min(GPU_queue_entry.queue_order)).scalar()
+            queue_entry.queue_order = (min_order or 0) - 1
+        elif position == 'back':
+            # Set to a value higher than the current maximum
+            max_order = db.session.query(func.max(GPU_queue_entry.queue_order)).scalar()
+            queue_entry.queue_order = (max_order or 0) + 1
+
+        db.session.commit()
+        return jsonify({'message': f'Queue entry moved to {position}'}), 200
+    except Exception as e:
+        return jsonify({'message': 'Error moving queue entry', 'error': str(e)}), 500
 

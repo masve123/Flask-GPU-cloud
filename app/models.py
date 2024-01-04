@@ -181,6 +181,33 @@ class GPU_usage(db.Model):
             'end_time': self.end_time.isoformat() if self.end_time else None,
             'usage_duration': self.usage_duration
         }
+    
+
+class GPU_queue_status(PyEnum):
+    """
+    Enum helper class to represent the queue status of a GPU instance
+    Note; this class inherits from the ENUM python standard library, not the SQLAlchemy Enum class.
+    """
+    PENDING = 'pending'
+    ALLOCATED = 'allocated'
+    CANCELLED = 'cancelled'
+
+
+class GPU_queue_entry(db.Model):
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    requested_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow) # This attribute records the timestamp when a queue entry is created
+    status = db.Column(Enum(GPU_queue_status), nullable=False, default=GPU_queue_status.PENDING)
+    queue_order = db.Column(db.Integer, nullable=True)  # Nullable and set only when explicitly ordering queue entries. This is an optional field used to manually adjust the position of a user in the queue, independent of when they joined.
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'requested_at': self.requested_at.isoformat(),
+            'status': self.status.value
+        }
 
 
 
