@@ -17,7 +17,11 @@ bp = Blueprint('bp', __name__) # this is necessary to avoid circular imports
 
 @bp.route('/register', methods=['POST'])
 def register():
-    """Register a new user."""
+    """
+    Register a new user.
+    
+
+    """
     data = request.json
 
     # Check if user already exists
@@ -273,26 +277,46 @@ def update_gpu_usage(usage_id):
 # An endpoint to start tracking the usage of a GPU instance.
 @bp.route('/gpu_usage/start', methods=['POST'])
 def start_gpu_usage():
-    """Start tracking the usage of a GPU instance."""
+    """
+    Start tracking the usage of a GPU instance.
+
+    A tracking and a booking is not the same. This is because
+    a user can book a GPU instance, but not use it. This endpoint
+    is used to start tracking the actual usage of a GPU instance.
+    """
     try:
         data = request.json
+
+        # Check if GPU instance exists
+        gpu_instance = GPU_instance.query.get(data['gpu_id'])
+        if not gpu_instance:
+            return jsonify({'message': 'GPU instance not found'}), 404
+
+        # Check if booking exists
+        booking = GPU_booking.query.get(data['booking_id'])
+        if not booking:
+            return jsonify({'message': 'Booking not found'}), 404
+
+        # Check if the booking corresponds to the GPU instance
+        if booking.gpu_id != gpu_instance.id:
+            return jsonify({'message': 'Booking does not match GPU instance'}), 400
+
+        # Start tracking GPU usage
         usage = GPU_usage(
-            gpu_id=data['gpu_id'],
-            booking_id=data['booking_id'],
+            gpu_id=gpu_instance.id,
+            booking_id=booking.booking_id,
             usage_duration=0  # Initialize with zero
         )
 
-        gpu_instance = GPU_instance.query.get(data['gpu_id'])
-        if gpu_instance:
-            gpu_instance.status = GPU_status.IN_USE
-            db.session.commit()
-
+        gpu_instance.status = GPU_status.IN_USE
         db.session.add(usage)
         db.session.commit()
+
         return jsonify({'message': 'GPU usage tracking started!'}), 201
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+
 
 
 
