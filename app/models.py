@@ -10,6 +10,8 @@ and the class attributes correspond to the columns in the table.
 
 from datetime import datetime
 from . import db
+from sqlalchemy import Column, Integer, String, Enum
+from enum import Enum as PyEnum
 
 class User(db.Model):
     """Each user represents a user in the database"""
@@ -34,13 +36,30 @@ class User(db.Model):
                 setattr(self, field, data[field])
 
 
+
+class GPU_status(PyEnum):
+    """Enum helper class to represent the status of a GPU instance
+    Note; this class inherits from the ENUM python standard library, not the SQLAlchemy Enum class."""
+    AVAILABLE = 'available'
+    IN_USE = 'in use'
+    BOOKED = 'booked'
+    MAINTENANCE = 'maintenance'
+    # Add any other statuses you need
+
+
+
 class GPU_instance(db.Model):
-    """To represent each GPU instance that users can rent."""
+    """
+    To represent each GPU instance that users can rent.
+
+    Note; A ```GPU instance``` represents a single GPU entry, i.e a single
+    GPU in the data center.
+    """
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(80), unique=True, nullable=False)
     gpu_type = db.Column(db.String(80), nullable=False)
     gpu_memory = db.Column(db.Integer, nullable=False)
-    status = db.Column(db.String(80), nullable=False, default='available')
+    status = db.Column(Enum(GPU_status), default=GPU_status.AVAILABLE, nullable=False)
     # Relationship example (if you have bookings related to an instance)
     bookings = db.relationship('GPU_booking', backref='gpu', lazy=True)
 
@@ -58,7 +77,7 @@ class GPU_instance(db.Model):
             'name': self.name,
             'gpu_type': self.gpu_type,
             'gpu_memory': self.gpu_memory,
-            'status': self.status
+            'status': self.status.value
         }
     
     def from_dict(self, data):
@@ -92,7 +111,7 @@ class GPU_booking(db.Model):
     
     def to_dict(self):
         return {
-            'id': self.booking_id,
+            'booking_id': self.booking_id,
             'user_id': self.user_id,
             'gpu_id': self.gpu_id,
             'start_time': self.start_time,
@@ -109,23 +128,30 @@ class GPU_booking(db.Model):
 
 class GPU_usage(db.Model):
     """
-    To track usage statistics of GPU instances.
+    To track actual usage statistics of GPU instances.
     
-    This table could be used to track the actual usage of the GPU instances, 
-    such as how long they were used, by whom, and other usage statistics. 
-    This could be updated in real-time as the GPU is being used, or after 
-    the usage has completed, depending on your application's design."""
+    Tracks real-time usage of GPU instances, including start and end times,
+    and calculates the duration of usage.
+
+    Note; the start and end time of this class represents the actual usage,
+    not the booking time as they can differ. For example, a user can book a GPU
+    instance for 1 hour, but only use it for 30 minutes. In this case, the booking
+    start and end time will be 1 hour apart, but the usage start and end time will
+    be 30 minutes apart.
+    """
 
     usage_id = db.Column(db.Integer, primary_key=True)
     gpu_id = db.Column(db.Integer, db.ForeignKey('gpu_instance.id'), nullable=False)
-    booking_id = db.Column(db.Integer, db.ForeignKey('gpu_booking.booking_id'))
-    usage_duration = db.Column(db.Integer, nullable=False)  # Example field
+    booking_id = db.Column(db.Integer, db.ForeignKey('gpu_booking.booking_id'), nullable=False)
+    start_time = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    end_time = db.Column(db.DateTime, nullable=True)  # Nullable as it's set when usage stops
+    usage_duration = db.Column(db.Integer, nullable=True)  # Calculated after usage ends
 
     # Relationship with GPU_instance
     gpu = db.relationship('GPU_instance', backref='usage', lazy=True)
 
-
     def __repr__(self):
         return '<GPU_usage %r>' % self.usage_id
+
 
 

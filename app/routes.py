@@ -3,7 +3,7 @@ This is where we set up our API endpoints
 """
 
 from flask import request, jsonify
-from app.models import GPU_booking, GPU_usage, User, GPU_instance
+from app.models import GPU_booking, GPU_usage, User, GPU_instance, GPU_status
 from flask import current_app as app
 from app import db
 
@@ -76,7 +76,7 @@ def delete_user(user_id):
 
 
 ############## GPU Instance endpoint functions ##############
-# Create a GPU Instance: An endpoint to create a new GPU instance.
+# Endpoint to create a new GPU instance.
 @bp.route('/gpu_instances', methods=['POST'])
 def create_gpu_instance():
     """Create a new GPU instance.
@@ -84,14 +84,26 @@ def create_gpu_instance():
     this endpoint is used to create a new GPU instance in the database. This means
     registering a GPU instance as a physical GPU, as one GPU instance would equate to
     one physical GPU in the data center."""
+
     data = request.json
-    gpu_instance = GPU_instance(name=data['name'], gpu_type=data['gpu_type'], gpu_memory=data['gpu_memory'])
-    db.session.add(gpu_instance)
-    db.session.commit()
-    return jsonify({'message': 'GPU instance created successfully!'}), 201
+
+    # Check if the GPU instance already exists
+    existing_instance = GPU_instance.query.filter_by(name=data['name']).first()
+    if existing_instance:
+        return jsonify({'message': 'GPU instance already exists.'}), 400
+
+    try:
+        gpu_instance = GPU_instance(name=data['name'], gpu_type=data['gpu_type'], gpu_memory=data['gpu_memory'])
+        db.session.add(gpu_instance)
+        db.session.commit()
+        return jsonify({'message': 'GPU instance created successfully!'}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': 'Failed to create GPU instance.', 'error': str(e)}), 500
 
 
-# List Available GPU Instances: An endpoint to fetch available GPU instances.
+
+# Endpoint to fetch all GPU instances.
 @bp.route('/gpu_instances', methods=['GET'])
 def get_all_gpu_instances():
     """Get all GPU instances."""
@@ -99,7 +111,7 @@ def get_all_gpu_instances():
     return jsonify([gpu.to_dict() for gpu in gpu_instances])
 
 
-# Release/Unbook GPU Instance: An endpoint to release a GPU instance after use.
+# Endpoint to release a GPU instance after use.
 @bp.route('/gpu_instances/<int:gpu_instance_id>', methods=['DELETE'])
 def delete_gpu_instance(gpu_instance_id):
     """
@@ -117,14 +129,14 @@ def delete_gpu_instance(gpu_instance_id):
     db.session.commit()
     return jsonify({'message': 'GPU instance deleted successfully!'}), 200
 
-# View GPU Instance Details: An endpoint to view details of a specific GPU instance.
+# Edpoint to view details of a specific GPU instance.
 @bp.route('/gpu_instances/<int:gpu_instance_id>', methods=['GET'])
 def get_gpu_instance(gpu_instance_id):
     """Get a GPU instance by id."""
     gpu_instance = GPU_instance.query.get(gpu_instance_id)
     return jsonify(gpu_instance.to_dict()) if gpu_instance else ('', 404)
 
-# Update GPU Instance Details: An endpoint to update the details of a GPU instance.
+# Endpoint to update the details of a GPU instance.
 @bp.route('/gpu_instances/<int:gpu_instance_id>', methods=['PUT'])
 def update_gpu_instance(gpu_instance_id):
     """Update a specific GPU instance.
@@ -146,7 +158,7 @@ def update_gpu_instance(gpu_instance_id):
 
 ############## GPU Booking endpoint functions ##############
 
-# Book a GPU Instance: An endpoint for users to book an available GPU instance.
+# Endpoint for users to book an available GPU instance.
 @bp.route('/gpu_bookings', methods=['POST'])
 def book_gpu_instance():
     """
@@ -160,7 +172,7 @@ def book_gpu_instance():
     if not gpu_instance:
         return jsonify({'message': 'GPU instance not found'}), 404
 
-    if gpu_instance.status != 'available':
+    if gpu_instance.status != GPU_status.AVAILABLE:
         return jsonify({'message': 'GPU instance not available'}), 400
 
     booking = GPU_booking(
@@ -170,12 +182,12 @@ def book_gpu_instance():
         end_time=data.get('end_time')
     )
     db.session.add(booking)
-    gpu_instance.status = 'booked'  # Update the GPU instance status
+    gpu_instance.status = GPU_status.BOOKED  # Update the GPU instance status
     db.session.commit()
     return jsonify({'message': 'GPU instance booked successfully!'}), 201
 
 
-# Cancel a GPU booking: An endpoint for users to cancel a GPU instance booking.
+# Endpoint for users to cancel a GPU instance booking.
 @bp.route('/gpu_bookings/cancel/<int:booking_id>', methods=['POST'])
 def cancel_gpu_booking(booking_id):
     """Cancel a GPU booking."""
@@ -185,37 +197,21 @@ def cancel_gpu_booking(booking_id):
 
     gpu_instance = GPU_instance.query.get(booking.gpu_id)
     if gpu_instance:
-        gpu_instance.status = 'available'
+        gpu_instance.status = GPU_status.AVAILABLE
 
     db.session.delete(booking)
     db.session.commit()
     return jsonify({'message': 'GPU booking cancelled successfully'}), 200
 
 
-# List GPU Bookings: An endpoint to list all GPU bookings.
+# Endpoint to list all GPU bookings.
 @bp.route('/gpu_bookings', methods=['GET'])
 def get_all_gpu_bookings():
     """Get all GPU bookings."""
     bookings = GPU_booking.query.all()
     return jsonify([booking.to_dict() for booking in bookings])
 
-# Update a GPU Booking: An endpoint to update the details of a GPU booking.
-@bp.route('/gpu_bookings/update/<int:booking_id>', methods=['PUT'])
-def update_booking(booking_id):
-    """Update a specific booking.
-    
-    This endpoint will update a booking duration or change the GPU instance
-    that was booked."""
-    booking = GPU_booking.query.get(booking_id)
-    if not booking:
-        return jsonify({'message': 'Booking not found'}), 404
-
-    data = request.json
-    # Add logic to update booking details and handle conflicts
-    # For example, updating the end_time, checking GPU availability, etc.
-    db.session.commit()
-    return jsonify({'message': 'Booking updated successfully!'}), 200
-
+# Endpoint to update the details of a GPU booking.
 @bp.route('/gpu_bookings/update/<int:booking_id>', methods=['PUT'])
 def update_booking(booking_id):
     """Update a specific booking."""
@@ -230,13 +226,22 @@ def update_booking(booking_id):
     # Check if the new GPU instance is different and available
     if new_gpu_id and new_gpu_id != booking.gpu_id:
         new_gpu_instance = GPU_instance.query.get(new_gpu_id)
-        if not new_gpu_instance or new_gpu_instance.status != 'available':
+        if not new_gpu_instance or new_gpu_instance.status != GPU_status.AVAILABLE:
             return jsonify({'message': 'New GPU instance not available'}), 400
 
     # Check if the new end time is valid and does not conflict with other bookings
-    if new_end_time and new_end_time > booking.end_time:
-        # Add logic to check for conflicts with other bookings
-        pass
+    if new_end_time:
+        new_end_time = datetime.strptime(new_end_time, '%Y-%m-%dT%H:%M:%S')  # Assuming ISO format
+        if new_end_time > booking.end_time:
+            # Check for booking conflicts
+            conflicting_bookings = GPU_booking.query.filter(
+                GPU_booking.gpu_id == booking.gpu_id,
+                GPU_booking.booking_id != booking.booking_id,
+                GPU_booking.start_time < new_end_time,
+                GPU_booking.end_time > booking.start_time
+            ).all()
+            if conflicting_bookings:
+                return jsonify({'message': 'New end time conflicts with other bookings'}), 400
 
     # Apply updates
     if new_gpu_id:
@@ -246,6 +251,7 @@ def update_booking(booking_id):
 
     db.session.commit()
     return jsonify({'message': 'Booking updated successfully!'}), 200
+
 
 
 
@@ -264,7 +270,7 @@ def update_gpu_usage(usage_id):
     db.session.commit()
     return jsonify({'message': 'GPU usage updated successfully!'}), 200
 
-# Start tracking GPU usage: An endpoint to start tracking the usage of a GPU instance.
+# An endpoint to start tracking the usage of a GPU instance.
 @bp.route('/gpu_usage/start', methods=['POST'])
 def start_gpu_usage():
     """Start tracking the usage of a GPU instance."""
@@ -274,21 +280,36 @@ def start_gpu_usage():
         booking_id=data['booking_id'],
         usage_duration=0  # Initialize with zero
     )
+
+    gpu_instance = GPU_instance.query.get(data['gpu_id'])
+    if gpu_instance:
+        gpu_instance.status = GPU_status.IN_USE
+        db.session.commit()
+
     db.session.add(usage)
     db.session.commit()
     return jsonify({'message': 'GPU usage tracking started!'}), 201
 
 
-# Stop tracking GPU usage: An endpoint to stop tracking the usage of a GPU instance.
+# An endpoint to stop tracking the usage of a GPU instance.
 @bp.route('/gpu_usage/stop/<int:usage_id>', methods=['POST'])
 def stop_gpu_usage(usage_id):
-    """Stop tracking the usage of a GPU instance."""
     usage = GPU_usage.query.get(usage_id)
     if not usage:
         return jsonify({'message': 'GPU usage record not found'}), 404
 
-    # Instead of deleting, mark the usage as ended
-    usage.end_time = datetime.utcnow()  # Assuming you have an end_time field
-    # or usage.status = 'stopped'  # If you are using a status field
+    # Update the usage record
+    usage.end_time = datetime.utcnow()
     db.session.commit()
+
+    # Update the GPU instance status
+    gpu_instance = GPU_instance.query.get(usage.gpu_id)
+    if gpu_instance:
+        gpu_instance.status = GPU_status.AVAILABLE
+        db.session.commit()
+
     return jsonify({'message': 'GPU usage tracking stopped!'}), 200
+
+
+### QUEUEING SYSTEM ###
+
