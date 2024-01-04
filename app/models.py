@@ -63,6 +63,15 @@ class GPU_instance(db.Model):
     # Relationship example (if you have bookings related to an instance)
     bookings = db.relationship('GPU_booking', backref='gpu', lazy=True)
 
+    # additional fields, not implemented yet
+    utilization_percentage = db.Column(db.Float, nullable=True)
+    peak_memory_usage = db.Column(db.Integer, nullable=True)  # in MB or GB
+    average_load = db.Column(db.Float, nullable=True)
+    error_count = db.Column(db.Integer, nullable=True, default=0)
+    energy_consumption = db.Column(db.Float, nullable=True)  # in kWh, if available
+    max_temperature = db.Column(db.Float, nullable=True)  # in Celsius
+    network_usage = db.Column(db.Float, nullable=True)  # in MB or GB
+
     def __repr__(self):
         return '<GPU_instance %r>' % self.name
     
@@ -77,7 +86,15 @@ class GPU_instance(db.Model):
             'name': self.name,
             'gpu_type': self.gpu_type,
             'gpu_memory': self.gpu_memory,
-            'status': self.status.value
+            'status': self.status.value,
+            # additioal fields, not implemented yet
+            'utilization_percentage': self.utilization_percentage,
+            'peak_memory_usage': self.peak_memory_usage,
+            'average_load': self.average_load,
+            'error_count': self.error_count,
+            'energy_consumption': self.energy_consumption,
+            'max_temperature': self.max_temperature,
+            'network_usage': self.network_usage
         }
     
     def from_dict(self, data):

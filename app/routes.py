@@ -8,7 +8,10 @@ from flask import current_app as app
 from app import db
 
 from flask import Blueprint
-from datetime import datetime
+
+from datetime import datetime, timedelta
+from . import db
+from sqlalchemy import func
 
 bp = Blueprint('bp', __name__) # this is necessary to avoid circular imports
 
@@ -345,6 +348,36 @@ def get_active_gpus():
     """Get all active GPU usage records."""
     active_usages = GPU_usage.query.filter(GPU_usage.end_time.is_(None)).all()
     return jsonify([usage.to_dict() for usage in active_usages])
+
+
+# An endpoint to generate a report for a specific GPU's usage over the past 24 hours.
+@bp.route('/gpu_usage/report/<int:gpu_id>', methods=['GET'])
+def gpu_usage_report(gpu_id):
+    """
+    Generate a report for a specific GPU's usage over the past 24 hours.
+    """
+    last_24_hours = datetime.utcnow() - timedelta(days=1)
+    usage_records = GPU_usage.query.filter(
+        GPU_usage.gpu_id == gpu_id,
+        GPU_usage.start_time >= last_24_hours
+    ).all()
+
+    # Aggregating metrics
+    total_usage_duration = sum([record.usage_duration for record in usage_records if record.usage_duration])
+    average_utilization = sum([record.utilization_percentage for record in usage_records if record.utilization_percentage]) / len(usage_records)
+    peak_memory_usage = max([record.peak_memory_usage for record in usage_records if record.peak_memory_usage], default=0)
+    average_load = sum([record.average_load for record in usage_records if record.average_load]) / len(usage_records)
+
+    # Creating the report
+    report = {
+        'gpu_id': gpu_id,
+        'total_usage_duration_last_24_hours': total_usage_duration,
+        'average_utilization_percentage': average_utilization,
+        'peak_memory_usage_MB': peak_memory_usage,
+        'average_load_percentage': average_load
+    }
+
+    return jsonify(report)
 
 
 
