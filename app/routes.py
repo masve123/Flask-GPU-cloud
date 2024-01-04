@@ -274,21 +274,26 @@ def update_gpu_usage(usage_id):
 @bp.route('/gpu_usage/start', methods=['POST'])
 def start_gpu_usage():
     """Start tracking the usage of a GPU instance."""
-    data = request.json
-    usage = GPU_usage(
-        gpu_id=data['gpu_id'],
-        booking_id=data['booking_id'],
-        usage_duration=0  # Initialize with zero
-    )
+    try:
+        data = request.json
+        usage = GPU_usage(
+            gpu_id=data['gpu_id'],
+            booking_id=data['booking_id'],
+            usage_duration=0  # Initialize with zero
+        )
 
-    gpu_instance = GPU_instance.query.get(data['gpu_id'])
-    if gpu_instance:
-        gpu_instance.status = GPU_status.IN_USE
+        gpu_instance = GPU_instance.query.get(data['gpu_id'])
+        if gpu_instance:
+            gpu_instance.status = GPU_status.IN_USE
+            db.session.commit()
+
+        db.session.add(usage)
         db.session.commit()
+        return jsonify({'message': 'GPU usage tracking started!'}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
 
-    db.session.add(usage)
-    db.session.commit()
-    return jsonify({'message': 'GPU usage tracking started!'}), 201
 
 
 # An endpoint to stop tracking the usage of a GPU instance.
@@ -309,6 +314,14 @@ def stop_gpu_usage(usage_id):
         db.session.commit()
 
     return jsonify({'message': 'GPU usage tracking stopped!'}), 200
+
+# An endpoint to get all active GPU usage records.
+@bp.route('/gpu_usage/active', methods=['GET'])
+def get_active_gpus():
+    """Get all active GPU usage records."""
+    active_usages = GPU_usage.query.filter(GPU_usage.end_time.is_(None)).all()
+    return jsonify([usage.to_dict() for usage in active_usages])
+
 
 
 ### QUEUEING SYSTEM ###

@@ -152,6 +152,19 @@ class GPU_usage(db.Model):
 
     def __repr__(self):
         return '<GPU_usage %r>' % self.usage_id
+    
+
+    def to_dict(self):
+        """Converts GPU usage object to a dictionary."""
+        return {
+            'usage_id': self.usage_id,
+            'gpu_id': self.gpu_id,
+            'booking_id': self.booking_id,
+            'start_time': self.start_time.isoformat() if self.start_time else None,
+            'end_time': self.end_time.isoformat() if self.end_time else None,
+            'usage_duration': self.usage_duration
+        }
+
 
 
 
