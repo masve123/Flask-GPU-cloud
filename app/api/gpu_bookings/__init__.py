@@ -1,0 +1,1 @@
+from .routes import gpu_bookings_blueprint

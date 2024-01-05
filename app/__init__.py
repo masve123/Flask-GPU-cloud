@@ -14,6 +14,16 @@ app.config.from_object(Config)
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 
-from app.routes import bp
-app.register_blueprint(bp)
+# Importing blueprints
+from .api.users.routes import users_blueprint
+from .api.gpu_instances.routes import gpu_instances_blueprint
+from .api.gpu_bookings.routes import gpu_bookings_blueprint
+from .api.gpu_usage.routes import gpu_usage_blueprint
+from .api.queue.routes import queue_blueprint
 
+# Registering blueprints
+app.register_blueprint(users_blueprint, url_prefix='/users')
+app.register_blueprint(gpu_instances_blueprint, url_prefix='/gpu_instances')
+app.register_blueprint(gpu_bookings_blueprint, url_prefix='/gpu_bookings')
+app.register_blueprint(gpu_usage_blueprint, url_prefix='/gpu_usage')
+app.register_blueprint(queue_blueprint, url_prefix='/queue')
