@@ -12,10 +12,10 @@ from flask import Blueprint
 from datetime import datetime, timedelta
 from sqlalchemy import func
 
-queue_blueprint = Blueprint('queue', __name__, url_prefix='/api')
+queue_blueprint = Blueprint('queue', __name__)
 
 ############## QUEUEING SYSTEM ##############
-@queue_blueprint.route('/gpu_queue/join', methods=['POST'])
+@queue_blueprint.route('/join', methods=['POST'])
 def join_gpu_queue():
     """
     Add a user to the GPU queue
@@ -50,7 +50,7 @@ def join_gpu_queue():
 
     return jsonify({'message': 'Added to GPU queue', 'queue_entry': queue_entry.to_dict()}), 201
 
-@queue_blueprint.route('/gpu_queue/status', methods=['GET'])
+@queue_blueprint.route('/status', methods=['GET'])
 def check_queue_status():
     """
     Check the status of a user in the GPU queue
@@ -77,7 +77,7 @@ def check_queue_status():
     queue_entries = GPU_queue_entry.query.filter_by(user_id=user_id).order_by(GPU_queue_entry.requested_at).all()
     return jsonify([entry.to_dict() for entry in queue_entries])
 
-@queue_blueprint.route('/gpu_queue/cancel/<int:queue_entry_id>', methods=['POST'])
+@queue_blueprint.route('/cancel/<int:queue_entry_id>', methods=['POST'])
 def cancel_queue_entry(queue_entry_id):
     """
     Cancel a user's queue entry
@@ -114,7 +114,7 @@ def cancel_queue_entry(queue_entry_id):
 
     return jsonify({'message': 'Queue entry cancelled successfully'}), 200
 
-@queue_blueprint.route('/gpu_queue', methods=['GET'])
+@queue_blueprint.route('/', methods=['GET'])
 def get_gpu_queue():
     """
     Retrieve the entire GPU queue
@@ -129,7 +129,7 @@ def get_gpu_queue():
     queue_entries = GPU_queue_entry.query.order_by(GPU_queue_entry.requested_at).all()
     return jsonify([entry.to_dict() for entry in queue_entries])
 
-@queue_blueprint.route('/gpu_queue/next', methods=['GET'])
+@queue_blueprint.route('/next', methods=['GET'])
 def get_next_in_queue():
     """
     Get the next user in the queue
@@ -153,7 +153,7 @@ def get_next_in_queue():
 
 
 
-@queue_blueprint.route('/gpu_queue/move/<int:queue_entry_id>/<string:position>', methods=['POST'])
+@queue_blueprint.route('/move/<int:queue_entry_id>/<string:position>', methods=['POST'])
 def move_queue_entry(queue_entry_id, position):
     """
     Move a user in the queue to a specified position.

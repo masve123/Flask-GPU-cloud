@@ -12,10 +12,11 @@ from flask import Blueprint
 from datetime import datetime, timedelta
 from sqlalchemy import func
 
-gpu_usage_blueprint = Blueprint('gpu_usage', __name__, url_prefix='/api')
+gpu_usage_blueprint = Blueprint('gpu_usage', __name__)
 
 ############## GPU Usage endpoint functions ##############
-@gpu_usage_blueprint.route('/gpu_usage/update/<int:usage_id>', methods=['PUT'])
+# Endpoint to update the usage details
+@gpu_usage_blueprint.route('/update/<int:usage_id>', methods=['PUT'])
 def update_gpu_usage(usage_id):
     """
     Update GPU usage details
@@ -52,8 +53,9 @@ def update_gpu_usage(usage_id):
     db.session.commit()
     return jsonify({'message': 'GPU usage updated successfully!'}), 200
 
+
 # An endpoint to start tracking the usage of a GPU instance.
-@gpu_usage_blueprint.route('/gpu_usage/start', methods=['POST'])
+@gpu_usage_blueprint.route('/start', methods=['POST'])
 def start_gpu_usage():
     """
     Start tracking GPU usage
@@ -82,7 +84,7 @@ def start_gpu_usage():
       404:
         description: GPU instance or booking not found.
       400:
-        description: Booking does not match GPU instance.
+        description: Booking does not match GPU instance or tracking already started.
     """
     try:
         data = request.json
@@ -92,27 +94,29 @@ def start_gpu_usage():
         if not gpu_instance:
             return jsonify({'message': 'GPU instance not found'}), 404
 
-        # Check if booking exists
+        # Check if booking exists and matches the GPU instance
         booking = GPU_booking.query.get(data['booking_id'])
-        if not booking:
-            return jsonify({'message': 'Booking not found'}), 404
+        if not booking or booking.gpu_id != gpu_instance.id:
+            return jsonify({'message': 'Booking not found or does not match GPU instance'}), 404
 
-        # Check if the booking corresponds to the GPU instance
-        if booking.gpu_id != gpu_instance.id:
-            return jsonify({'message': 'Booking does not match GPU instance'}), 400
+        # Check if usage tracking is already started
+        existing_usage = GPU_usage.query.filter_by(gpu_id=gpu_instance.id, booking_id=booking.booking_id, end_time=None).first()
+        if existing_usage:
+            return jsonify({
+                'message': 'GPU usage tracking already started for this booking',
+                'usage_id': existing_usage.usage_id
+            }), 400
 
         # Start tracking GPU usage
-        usage = GPU_usage(
-            gpu_id=gpu_instance.id,
-            booking_id=booking.booking_id,
-            usage_duration=0  # Initialize with zero
-        )
-
+        usage = GPU_usage(gpu_id=gpu_instance.id, booking_id=booking.booking_id, usage_duration=0) # Initialize with zero
         gpu_instance.status = GPU_status.IN_USE
         db.session.add(usage)
         db.session.commit()
 
-        return jsonify({'message': 'GPU usage tracking started!'}), 201
+        return jsonify({
+            'message': 'GPU usage tracking started!',
+            'usage_id': usage.usage_id
+        }), 201
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
@@ -120,8 +124,11 @@ def start_gpu_usage():
 
 
 
+
+
+
 # An endpoint to stop tracking the usage of a GPU instance.
-@gpu_usage_blueprint.route('/gpu_usage/stop/<int:usage_id>', methods=['POST'])
+@gpu_usage_blueprint.route('/stop/<int:usage_id>', methods=['POST'])
 def stop_gpu_usage(usage_id):
     """
     Stop tracking GPU usage
@@ -158,7 +165,7 @@ def stop_gpu_usage(usage_id):
     return jsonify({'message': 'GPU usage tracking stopped!'}), 200
 
 # An endpoint to get all active GPU usage records.
-@gpu_usage_blueprint.route('/gpu_usage/active', methods=['GET'])
+@gpu_usage_blueprint.route('/active', methods=['GET'])
 def get_active_gpus():
     """
     Get all active GPU usage records
@@ -175,8 +182,8 @@ def get_active_gpus():
 
 
 # An endpoint to generate a report for a specific GPU's usage over the past 24 hours.
-@gpu_usage_blueprint.route('/gpu_usage/report/<int:gpu_id>', methods=['GET'])
-def gpu_usage_report(gpu_id): # look at GPUtils python package for further development
+@gpu_usage_blueprint.route('/report/<int:gpu_id>', methods=['GET'])
+def gpu_usage_report(gpu_id):
     """
     Generate a GPU usage report
     ---
@@ -199,17 +206,24 @@ def gpu_usage_report(gpu_id): # look at GPUtils python package for further devel
         GPU_usage.start_time >= last_24_hours
     ).all()
 
-    # Aggregating metrics
+    # Fetch the GPU instance
+    gpu_instance = GPU_instance.query.get(gpu_id)
+    if not gpu_instance:
+        return jsonify({'message': 'GPU instance not found'}), 404
+
+    # Aggregating metrics from GPU_usage
     total_usage_duration = sum([record.usage_duration for record in usage_records if record.usage_duration])
-    average_utilization = sum([record.utilization_percentage for record in usage_records if record.utilization_percentage]) / len(usage_records)
-    peak_memory_usage = max([record.peak_memory_usage for record in usage_records if record.peak_memory_usage], default=0)
-    average_load = sum([record.average_load for record in usage_records if record.average_load]) / len(usage_records)
+
+    # Extracting metrics from GPU_instance
+    utilization_percentage = gpu_instance.utilization_percentage
+    peak_memory_usage = gpu_instance.peak_memory_usage
+    average_load = gpu_instance.average_load
 
     # Creating the report
     report = {
         'gpu_id': gpu_id,
         'total_usage_duration_last_24_hours': total_usage_duration,
-        'average_utilization_percentage': average_utilization,
+        'utilization_percentage': utilization_percentage,
         'peak_memory_usage_MB': peak_memory_usage,
         'average_load_percentage': average_load
     }
