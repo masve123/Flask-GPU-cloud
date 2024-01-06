@@ -129,6 +129,7 @@ class GPU_booking(db.Model):
         """
         Soft deletes a booking by marking it as cancelled.
         Note; this does not delete the booking from the database.
+        Also includes a timestamp of when the booking was cancelled.
         """
 
         if self.is_cancelled:

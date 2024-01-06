@@ -239,3 +239,48 @@ def update_gpu_instance(gpu_instance_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'message': 'Error updating GPU instance', 'error': str(e)}), 500
+    
+
+
+
+# Endpoint to get the status of a specific GPU instance.
+@gpu_instances_blueprint.route('/status/<int:gpu_instance_id>', methods=['GET'])
+def get_gpu_instance_status(gpu_instance_id):
+    """
+    Get the status of a specific GPU instance along with additional details.
+    ---
+    tags:
+      - GPU Instances
+    description: Retrieve the status and relevant details of a specific GPU instance by its ID.
+    parameters:
+      - name: gpu_instance_id
+        in: path
+        type: integer
+        required: true
+        description: Unique ID of the GPU instance.
+    responses:
+      200:
+        description: Status and details of the GPU instance.
+      404:
+        description: GPU instance not found.
+    """
+    gpu_instance = GPU_instance.query.get(gpu_instance_id)
+    if not gpu_instance:
+        return jsonify({'message': 'GPU instance not found'}), 404
+
+    # Convert the status enum to a string
+    status_str = gpu_instance.status.name if gpu_instance.status else None
+
+    response_data = {
+        'gpu_instance_id': gpu_instance_id,
+        'gpu_instance_name': gpu_instance.name,
+        'status': status_str
+    }
+
+    # If the GPU is booked, include the booking ID
+    if gpu_instance.status == GPU_status.BOOKED:
+        booking = GPU_booking.query.filter_by(gpu_id=gpu_instance_id, is_cancelled=False).first()
+        if booking:
+            response_data['booking_id'] = booking.booking_id
+
+    return jsonify(response_data), 200

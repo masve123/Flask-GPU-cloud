@@ -190,6 +190,7 @@ def update_booking(booking_id):
     tags:
       - GPU Bookings
     description: Update the details of a specific GPU booking.
+    This could be used to change the GPU instance or the end time of the booking.
     parameters:
       - name: booking_id
         in: path
