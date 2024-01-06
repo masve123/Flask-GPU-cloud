@@ -143,10 +143,20 @@ def update_user(user_id):
     user = User.query.get(user_id)
     if not user:
         return jsonify({'message': 'User not found'}), 404
+    
     data = request.json
-    user.from_dict(data)
-    db.session.commit()
-    return jsonify({'message': 'User updated successfully!'}), 200
+    # Validate data here
+
+    try:
+        user.from_dict(data)
+        db.session.commit()
+        return jsonify({'message': 'User updated successfully!', 'user': user.to_dict()}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': 'Update failed', 'error': str(e)}), 500
+
+
+
 
 
 @users_blueprint.route('/<int:user_id>', methods=['DELETE'])

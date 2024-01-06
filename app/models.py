@@ -121,7 +121,22 @@ class GPU_booking(db.Model):
     gpu_id = db.Column(db.Integer, db.ForeignKey('gpu_instance.id'), nullable=False)
     start_time = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     end_time = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    is_cancelled = db.Column(db.Boolean, default=False, nullable=False)
+    cancelled_at = db.Column(db.DateTime, nullable=True)
 
+
+    def soft_delete(self):
+        """
+        Soft deletes a booking by marking it as cancelled.
+        Note; this does not delete the booking from the database.
+        """
+
+        if self.is_cancelled:
+            raise Exception("Booking is already cancelled.")
+        
+        
+        self.is_cancelled = True
+        self.cancelled_at = datetime.utcnow()
 
     def __repr__(self):
         return '<GPU_booking %r>' % self.booking_id
@@ -194,6 +209,9 @@ class GPU_queue_status(PyEnum):
 
 
 class GPU_queue_entry(db.Model):
+    """
+    To track the queue of users waiting for a GPU instance.
+    """
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
