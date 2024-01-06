@@ -38,8 +38,11 @@ class User(db.Model):
 
 
 class GPU_status(PyEnum):
-    """Enum helper class to represent the status of a GPU instance
-    Note; this class inherits from the ENUM python standard library, not the SQLAlchemy Enum class."""
+    """
+    Enum helper class to represent the status of a GPU instance.
+    
+    NOTE; this class inherits from the ```ENUM``` python standard library, not the ```SQLAlchemy Enum``` class.
+    """
     AVAILABLE = 'available'
     IN_USE = 'in use'
     BOOKED = 'booked'
@@ -52,7 +55,7 @@ class GPU_instance(db.Model):
     """
     To represent each GPU instance that users can rent.
 
-    Note; A ```GPU instance``` represents a single GPU entry, i.e a single
+    NOTE; A ```GPU instance``` represents a single GPU entry, i.e a single
     GPU in the data center.
     """
     id = db.Column(db.Integer, primary_key=True)
@@ -128,7 +131,8 @@ class GPU_booking(db.Model):
     def soft_delete(self):
         """
         Soft deletes a booking by marking it as cancelled.
-        Note; this does not delete the booking from the database.
+        
+        NOTE; this does not delete the booking from the database, but rather sets the ```is_cancelled``` flag to True.
         Also includes a timestamp of when the booking was cancelled.
         """
 
