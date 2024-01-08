@@ -22,7 +22,7 @@ def join_gpu_queue():
     ---
     tags:
       - Queueing System
-    description: Add a user to the queue for GPU resource allocation.
+    description: Add a user to the queue for GPU resource allocation. Ensures the user exists and is not already in the queue.
     parameters:
       - in: body
         name: body
@@ -38,17 +38,38 @@ def join_gpu_queue():
       201:
         description: User added to GPU queue successfully.
       400:
-        description: User ID is required.
+        description: Invalid request (missing user ID, user does not exist, or user already in queue).
     """
     user_id = request.json.get('user_id')
     if not user_id:
         return jsonify({'message': 'User ID is required'}), 400
 
+    # Check if user exists
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'message': 'User not found'}), 404
+
+    # Check if user is already in the queue
+    existing_entry = GPU_queue_entry.query.filter_by(user_id=user_id, status=GPU_queue_status.PENDING).first()
+    if existing_entry:
+        # Calculate the user's position in the queue
+        user_position = GPU_queue_entry.query.filter(
+            GPU_queue_entry.requested_at <= existing_entry.requested_at,
+            GPU_queue_entry.status == GPU_queue_status.PENDING
+        ).count()
+
+        return jsonify({
+            'message': 'User already in the queue',
+            'queue_entry': existing_entry.to_dict(),
+            'position_in_queue': user_position
+        }), 200
+
     queue_entry = GPU_queue_entry(user_id=user_id)
     db.session.add(queue_entry)
     db.session.commit()
-
     return jsonify({'message': 'Added to GPU queue', 'queue_entry': queue_entry.to_dict()}), 201
+
+
 
 @queue_blueprint.route('/status', methods=['GET'])
 def check_queue_status():
@@ -57,7 +78,7 @@ def check_queue_status():
     ---
     tags:
       - Queueing System
-    description: Check the queue status for a specific user.
+    description: Check the queue status for a specific user, including their position in the queue.
     parameters:
       - name: user_id
         in: query
@@ -66,16 +87,41 @@ def check_queue_status():
         description: The user ID to check the queue status for.
     responses:
       200:
-        description: Queue status retrieved successfully.
+        description: Queue status and positions retrieved successfully.
       400:
         description: User ID is required.
+      404:
+        description: User not found.
     """
     user_id = request.args.get('user_id')
     if not user_id:
         return jsonify({'message': 'User ID is required'}), 400
 
+    # Check if user exists
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'message': 'User not found'}), 404
+    
     queue_entries = GPU_queue_entry.query.filter_by(user_id=user_id).order_by(GPU_queue_entry.requested_at).all()
-    return jsonify([entry.to_dict() for entry in queue_entries])
+    
+    # Check if the user has any queue entries
+    if not queue_entries:
+        return jsonify({'message': 'User is currently not in the queue'}), 200
+    
+    # Add position information for each queue entry
+    enhanced_entries = []
+    for entry in queue_entries:
+        user_position = GPU_queue_entry.query.filter(
+            GPU_queue_entry.requested_at <= entry.requested_at,
+            GPU_queue_entry.status == GPU_queue_status.PENDING
+        ).count()
+        entry_dict = entry.to_dict()
+        entry_dict['position'] = user_position
+        enhanced_entries.append(entry_dict)
+
+    return jsonify(enhanced_entries)
+
+   
 
 @queue_blueprint.route('/cancel/<int:queue_entry_id>', methods=['POST'])
 def cancel_queue_entry(queue_entry_id):
@@ -108,6 +154,10 @@ def cancel_queue_entry(queue_entry_id):
     
     if queue_entry.status == GPU_queue_status.ALLOCATED:
         return jsonify({'message': 'Cannot cancel an allocated queue entry'}), 400
+    
+    if queue_entry.status != GPU_queue_status.PENDING:
+        # This should never happen, but just in case other queue statuses are added in the future
+        return jsonify({'message': 'Queue entry cannot be cancelled as it is not in a PENDING state'}), 400
 
     queue_entry.status = GPU_queue_status.CANCELLED
     db.session.commit()
@@ -156,8 +206,13 @@ def get_next_in_queue():
 @queue_blueprint.route('/move/<int:queue_entry_id>/<string:position>', methods=['POST'])
 def move_queue_entry(queue_entry_id, position):
     """
-    Move a user in the queue to a specified position.
     NOTE; this is an endpoint meant for admin users only.
+    NOTE; This function could potentially be optimized, 
+    as it currently updates the queue_order of all entries 
+    in the queue when moving a specific entry. For simplicity,
+    this is the approach taken for this example.
+    
+    Move a user in the queue to a specified position
     ---
     tags:
       - Queueing System
@@ -192,17 +247,20 @@ def move_queue_entry(queue_entry_id, position):
         return jsonify({'message': 'Invalid position'}), 400
     
     try:
-        # Logic to update queue_order based on position
         if position == 'front':
-            # Set to a value lower than the current minimum
-            min_order = db.session.query(func.min(GPU_queue_entry.queue_order)).scalar()
-            queue_entry.queue_order = (min_order or 0) - 1
+            # Increment the queue_order of all other entries
+            GPU_queue_entry.query.update({GPU_queue_entry.queue_order: GPU_queue_entry.queue_order + 1})
+            db.session.flush() # used to update the queue_order of all entries in the queue before setting a specific entry's queue_order
+
+            # Move this entry to the front
+            queue_entry.queue_order = 1
+
         elif position == 'back':
-            # Set to a value higher than the current maximum
-            max_order = db.session.query(func.max(GPU_queue_entry.queue_order)).scalar()
-            queue_entry.queue_order = (max_order or 0) + 1
+            # Find the maximum queue order and set this entry just behind it
+            max_order = db.session.query(func.max(GPU_queue_entry.queue_order)).scalar() or 0
+            queue_entry.queue_order = max_order + 1
 
         db.session.commit()
-        return jsonify({'message': f'Queue entry moved to {position}'}), 200
+        return jsonify({'message': f'Queue entry moved to {position}', 'queue_order': queue_entry.queue_order}), 200
     except Exception as e:
         return jsonify({'message': 'Error moving queue entry', 'error': str(e)}), 500
