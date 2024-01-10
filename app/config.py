@@ -1,5 +1,17 @@
-class Config(object):    
-    SQLALCHEMY_DATABASE_URI = 'postgresql://localhost/gpu_cloud_service'
+import os
+
+class Config(object):
+    # SQLALCHEMY_DATABASE_URI = 'postgresql://localhost/gpu_cloud_service'
+
+    username = os.getenv('RDS_USERNAME', 'default_username')
+    password = os.getenv('RDS_PASSWORD', 'default_password')
+    endpoint = os.getenv('RDS_ENDPOINT', 'default_endpoint')
+    port = os.getenv('RDS_PORT', '5432')  # Default PostgreSQL port is 5432
+    dbname = os.getenv('RDS_DB_NAME', 'flask-database-1')
+
+    SQLALCHEMY_DATABASE_URI = f'postgresql://{username}:{password}@{endpoint}:{port}/{dbname}'
+
+
 # kan sette opp passord ved å kjøre følgende i terminalen:
 # $ psql
     # \password your_username
